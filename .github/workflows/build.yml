@@ -1,133 +1,136 @@
 name: Build and Release
 
 on:
-  push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
+    push:
+        branches: [main, master]
+        tags:
+            - "v*"
+    pull_request:
+        branches: [main, master]
+
+permissions:
+    contents: write
 
 env:
-  CARGO_TERM_COLOR: always
+    CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build on macOS
-    runs-on: macos-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-    
-    - name: Build
-      run: cargo build --release --verbose
-    
-    - name: Run tests
-      run: cargo test --release --verbose
-    
-    - name: Check binary
-      run: |
-        file target/release/macdisp
-        ./target/release/macdisp --version || echo "Version command not available"
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: macdisp-macos
-        path: target/release/macdisp
-        if-no-files-found: error
+    build:
+        name: Build on macOS
+        runs-on: macos-latest
 
-  release:
-    name: Create Release
-    needs: build
-    runs-on: macos-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-    
-    - name: Build release binary
-      run: cargo build --release --verbose
-    
-    - name: Create tarball
-      run: |
-        cd target/release
-        tar -czf macdisp-macos-${{ github.ref_name }}.tar.gz macdisp
-        cd ../..
-    
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          target/release/macdisp-macos-${{ github.ref_name }}.tar.gz
-        body: |
-          ## macdisp ${{ github.ref_name }}
-          
-          macOS display configuration tool - Rust implementation of displayplacer
-          
-          ### Installation
-          ```bash
-          tar -xzf macdisp-macos-${{ github.ref_name }}.tar.gz
-          sudo mv macdisp /usr/local/bin/
-          ```
-          
-          ### Usage
-          ```bash
-          macdisp list
-          macdisp modes 1
-          macdisp "id:1 res:1920x1080 hz:60"
-          ```
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        steps:
+            - uses: actions/checkout@v4
 
-  build-universal:
-    name: Build Universal Binary
-    runs-on: macos-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        target: aarch64-apple-darwin,x86_64-apple-darwin
-    
-    - name: Build for ARM64
-      run: cargo build --release --target aarch64-apple-darwin
-    
-    - name: Build for x86_64
-      run: cargo build --release --target x86_64-apple-darwin
-    
-    - name: Create Universal Binary
-      run: |
-        lipo -create \
-          target/aarch64-apple-darwin/release/macdisp \
-          target/x86_64-apple-darwin/release/macdisp \
-          -output macdisp-universal
-        
-        file macdisp-universal
-        chmod +x macdisp-universal
-    
-    - name: Create universal tarball
-      run: tar -czf macdisp-universal-${{ github.ref_name }}.tar.gz macdisp-universal
-    
-    - name: Upload to Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: macdisp-universal-${{ github.ref_name }}.tar.gz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Install Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+
+            - name: Build
+              run: cargo build --release --verbose
+
+            - name: Run tests
+              run: cargo test --release --verbose
+
+            - name: Check binary
+              run: |
+                  file target/release/macdisp
+                  ./target/release/macdisp --version || echo "Version command not available"
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: macdisp-macos
+                  path: target/release/macdisp
+                  if-no-files-found: error
+
+    release:
+        name: Create Release
+        needs: build
+        runs-on: macos-latest
+        if: startsWith(github.ref, 'refs/tags/v')
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+
+            - name: Build release binary
+              run: cargo build --release --verbose
+
+            - name: Create tarball
+              run: |
+                  cd target/release
+                  tar -czf macdisp-macos-${{ github.ref_name }}.tar.gz macdisp
+                  cd ../..
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: |
+                      target/release/macdisp-macos-${{ github.ref_name }}.tar.gz
+                  body: |
+                      ## macdisp ${{ github.ref_name }}
+
+                      macOS display configuration tool - Rust implementation of displayplacer
+
+                      ### Installation
+                      ```bash
+                      tar -xzf macdisp-macos-${{ github.ref_name }}.tar.gz
+                      sudo mv macdisp /usr/local/bin/
+                      ```
+
+                      ### Usage
+                      ```bash
+                      macdisp list
+                      macdisp modes 1
+                      macdisp "id:1 res:1920x1080 hz:60"
+                      ```
+                  draft: false
+                  prerelease: false
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    build-universal:
+        name: Build Universal Binary
+        runs-on: macos-latest
+        if: startsWith(github.ref, 'refs/tags/v')
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  toolchain: stable
+                  target: aarch64-apple-darwin,x86_64-apple-darwin
+
+            - name: Build for ARM64
+              run: cargo build --release --target aarch64-apple-darwin
+
+            - name: Build for x86_64
+              run: cargo build --release --target x86_64-apple-darwin
+
+            - name: Create Universal Binary
+              run: |
+                  lipo -create \
+                    target/aarch64-apple-darwin/release/macdisp \
+                    target/x86_64-apple-darwin/release/macdisp \
+                    -output macdisp-universal
+
+                  file macdisp-universal
+                  chmod +x macdisp-universal
+
+            - name: Create universal tarball
+              run: tar -czf macdisp-universal-${{ github.ref_name }}.tar.gz macdisp-universal
+
+            - name: Upload to Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: macdisp-universal-${{ github.ref_name }}.tar.gz
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
