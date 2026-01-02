@@ -64,7 +64,7 @@ cargo build --release
 
 ```bash
 # Copy to a location in your PATH
-sudo cp target/release/cd macdisp /usr/local/bin/
+sudo cp target/release/macdisp /usr/local/bin/
 ```
 
 ## Usage
@@ -75,17 +75,52 @@ sudo cp target/release/cd macdisp /usr/local/bin/
 macdisp
 # or
 macdisp list
+
+# Output as JSON
+macdisp list --json
 ```
 
 This shows all connected displays with their current configuration and generates a command to restore the current arrangement.
+
+The `--json` flag outputs the display information in JSON format, which is useful for scripting and integration with other tools.
 
 ### Show Available Modes
 
 ```bash
 macdisp modes <display_id>
+
+# Output as JSON
+macdisp modes <display_id> --json
 ```
 
 Shows all available display modes for a specific display, including resolution, refresh rate, bit depth, and whether each mode is safe for hardware.
+
+The `--json` flag outputs the mode information in JSON format, including the current mode and all available modes with detailed properties.
+
+### Hide/Show the Notch (MacBook Pro)
+
+```bash
+# Hide the notch (switch to smaller height mode)
+macdisp notch hide
+
+# Show the notch (switch to larger height mode)
+macdisp notch show
+
+# Toggle between hiding and showing the notch
+macdisp notch toggle
+
+# Specify a display ID (defaults to main display)
+macdisp notch hide --display-id 1
+```
+
+On MacBook Pro models with a notch, this command switches between display modes with different heights while maintaining the same width, refresh rate, and scaling settings. The "hide" mode uses a slightly smaller vertical resolution that doesn't extend into the notch area, while "show" mode uses the full screen height including the notch area.
+
+**Note:** If you run this command on a display without a notch (external monitors, older MacBooks, etc.), the tool will detect this and provide an appropriate error message:
+
+- For non-built-in displays: "Display X is not a MacBook built-in display with a notch"
+- For built-in displays without alternate height modes: "Display X does not appear to have a notch (no alternate height modes found)"
+
+This prevents accidentally switching to inappropriate display modes on non-notch displays.
 
 ### Configure Displays
 
@@ -117,6 +152,124 @@ macdisp \
 
 # Set a display to a specific mode number
 macdisp "id:1 mode:123"
+
+# Get display information as JSON for scripting
+macdisp list --json
+
+# Get all available modes as JSON
+macdisp modes 1 --json
+```
+
+### Notch Management
+
+```bash
+# Hide the notch on current display
+macdisp notch hide
+
+# Show the notch on current display
+macdisp notch show
+
+# Toggle notch visibility
+macdisp notch toggle
+
+# Target a specific display
+macdisp notch hide --display-id 1
+```
+
+The notch command intelligently finds display modes with matching specifications (width, refresh rate, color depth, scaling) but different heights to hide or show the notch area on compatible MacBook Pro displays. The command includes safety checks to prevent use on non-notch displays, providing clear error messages when run on external monitors or MacBooks without a notch.
+
+## JSON Output
+
+Both the `list` and `modes` commands support JSON output for easy integration with scripts and other tools.
+
+### List Command JSON Output
+
+```bash
+macdisp list --json
+```
+
+Returns an array of display objects:
+
+```json
+[
+    {
+        "id": 1,
+        "persistent_id": "37D8832A-2D66-02CA-B9F7-8F30A301B230",
+        "contextual_id": 1,
+        "serial": 4251086178,
+        "x": 0,
+        "y": 0,
+        "width": 1512,
+        "height": 945,
+        "rotation": 0,
+        "hz": 120.0,
+        "depth": 8,
+        "scaling": true,
+        "mode_number": 48,
+        "is_main": true,
+        "is_mirror": false,
+        "mirror_of": null,
+        "enabled": true,
+        "display_type": "MacBook built in screen"
+    }
+]
+```
+
+### Modes Command JSON Output
+
+```bash
+macdisp modes 1 --json
+```
+
+Returns detailed mode information:
+
+```json
+{
+    "display_id": 1,
+    "current_mode": {
+        "width": 1512,
+        "height": 945,
+        "refresh_rate": 120.0,
+        "depth": 8,
+        "mode_number": 48,
+        "is_stretched": false,
+        "is_interlaced": false,
+        "is_tv_mode": false,
+        "is_safe_for_hardware": true,
+        "is_scaled": true
+    },
+    "available_modes": [
+        {
+            "width": 960,
+            "height": 600,
+            "refresh_rate": 120.0,
+            "depth": 8,
+            "mode_number": 0,
+            "is_stretched": false,
+            "is_interlaced": false,
+            "is_tv_mode": false,
+            "is_safe_for_hardware": true,
+            "is_scaled": true
+        }
+    ],
+    "display_services_available": true
+}
+```
+
+### Scripting Examples
+
+```bash
+# Get the persistent ID of the main display
+MAIN_ID=$(macdisp list --json | python3 -c "import sys, json; displays = json.load(sys.stdin); print([d['persistent_id'] for d in displays if d['is_main']][0])")
+
+# Count available modes for display 1
+MODE_COUNT=$(macdisp modes 1 --json | python3 -c "import sys, json; data = json.load(sys.stdin); print(len(data['available_modes']))")
+
+# Get current resolution
+RESOLUTION=$(macdisp list --json | python3 -c "import sys, json; d = json.load(sys.stdin)[0]; print(f\"{d['width']}x{d['height']}\")")
+
+# Find all 120Hz modes
+macdisp modes 1 --json | python3 -c "import sys, json; data = json.load(sys.stdin); [print(f\"Mode {m['mode_number']}: {m['width']}x{m['height']} @ {m['refresh_rate']}Hz\") for m in data['available_modes'] if m['refresh_rate'] == 120.0]"
 ```
 
 ## Architecture

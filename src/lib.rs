@@ -2,7 +2,7 @@ use core_graphics::display::{CGDisplayBounds, CGGetActiveDisplayList};
 use serde::{Deserialize, Serialize};
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayMode {
     pub width: u32,
     pub height: u32,

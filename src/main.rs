@@ -1,8 +1,10 @@
 use clap::{Parser, Subcommand};
 use macdisp::{
     configure_display, get_active_displays, get_all_modes, get_current_mode, get_display_info,
-    is_display_services_available, list_displays, set_display_mode, DisplayConfig,
+    is_display_services_available, list_displays, set_display_mode, DisplayConfig, DisplayInfo,
+    DisplayMode,
 };
+use serde_json;
 use std::collections::HashMap;
 
 #[derive(Parser)]
@@ -24,12 +26,38 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// List all displays and their current configurations
-    List,
+    List {
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
+    },
     /// Show available display modes for a specific display
     Modes {
         /// Display ID
         display_id: u32,
+        /// Output in JSON format
+        #[arg(long)]
+        json: bool,
     },
+    /// Hide or show the notch on MacBook Pro displays
+    Notch {
+        /// Action: hide, show, or toggle
+        #[arg(value_enum)]
+        action: NotchAction,
+        /// Display ID (defaults to main display)
+        #[arg(short, long)]
+        display_id: Option<u32>,
+    },
+}
+
+#[derive(Clone, Debug, clap::ValueEnum)]
+enum NotchAction {
+    /// Hide the notch by switching to a mode with smaller height
+    Hide,
+    /// Show the notch by switching to a mode with larger height
+    Show,
+    /// Toggle between hiding and showing the notch
+    Toggle,
 }
 
 fn parse_config(config_str: &str) -> Result<DisplayConfig, String> {
@@ -231,49 +259,226 @@ fn apply_configuration(configs: Vec<DisplayConfig>) -> Result<(), String> {
     Ok(())
 }
 
-fn show_modes(display_id: u32) {
+fn list_displays_json() -> String {
+    let displays = get_active_displays();
+    let display_infos: Vec<DisplayInfo> = displays
+        .iter()
+        .filter_map(|&id| get_display_info(id))
+        .collect();
+
+    serde_json::to_string_pretty(&display_infos)
+        .unwrap_or_else(|e| format!("{{\"error\": \"Failed to serialize JSON: {}\"}}", e))
+}
+
+fn show_modes(display_id: u32, json: bool) {
     let modes = get_all_modes(display_id);
     let current = get_current_mode(display_id);
 
-    println!("Available modes for display {}:\n", display_id);
-    println!(
-        "{:<8} {:<12} {:<10} {:<8} {:<10} {:<6}",
-        "Mode #", "Resolution", "Hz", "Depth", "Safe", "Current"
-    );
-    println!("{:-<70}", "");
+    if json {
+        #[derive(serde::Serialize)]
+        struct ModesOutput {
+            display_id: u32,
+            current_mode: Option<DisplayMode>,
+            available_modes: Vec<DisplayMode>,
+            display_services_available: bool,
+        }
 
-    for mode in modes {
-        let is_current = current
-            .as_ref()
-            .map(|c| c.mode_number == mode.mode_number)
-            .unwrap_or(false);
+        let output = ModesOutput {
+            display_id,
+            current_mode: current,
+            available_modes: modes,
+            display_services_available: is_display_services_available(),
+        };
 
         println!(
-            "{:<8} {:<12} {:<10.2} {:<8} {:<10} {:<6}",
-            mode.mode_number,
-            format!("{}x{}", mode.width, mode.height),
-            mode.refresh_rate,
-            format!("{}-bit", mode.depth),
-            if mode.is_safe_for_hardware {
-                "yes"
-            } else {
-                "no"
-            },
-            if is_current { "*" } else { "" }
+            "{}",
+            serde_json::to_string_pretty(&output).unwrap_or_else(|e| {
+                format!("{{\"error\": \"Failed to serialize JSON: {}\"}}", e)
+            })
+        );
+    } else {
+        println!("Available modes for display {}:\n", display_id);
+        println!(
+            "{:<8} {:<12} {:<10} {:<8} {:<10} {:<6}",
+            "Mode #", "Resolution", "Hz", "Depth", "Safe", "Current"
+        );
+        println!("{:-<70}", "");
+
+        for mode in &modes {
+            let is_current = current
+                .as_ref()
+                .map(|c| c.mode_number == mode.mode_number)
+                .unwrap_or(false);
+
+            println!(
+                "{:<8} {:<12} {:<10.2} {:<8} {:<10} {:<6}",
+                mode.mode_number,
+                format!("{}x{}", mode.width, mode.height),
+                mode.refresh_rate,
+                format!("{}-bit", mode.depth),
+                if mode.is_safe_for_hardware {
+                    "yes"
+                } else {
+                    "no"
+                },
+                if is_current { "*" } else { "" }
+            );
+        }
+
+        println!("\n* = current mode");
+        println!(
+            "\nDisplayServices available: {}",
+            is_display_services_available()
+        );
+
+        if let Some(current) = current {
+            println!(
+                "Current mode is: {} ({}x{} @ {:.0}Hz)",
+                current.mode_number, current.width, current.height, current.refresh_rate
+            );
+        }
+    }
+}
+
+fn handle_notch_command(action: NotchAction, display_id: Option<u32>) -> Result<(), String> {
+    let display_id = display_id.unwrap_or_else(|| {
+        // Get main display
+        let displays = get_active_displays();
+        displays
+            .into_iter()
+            .find(|&id| {
+                get_display_info(id)
+                    .map(|info| info.is_main)
+                    .unwrap_or(false)
+            })
+            .unwrap_or(1)
+    });
+
+    // Check if this is a built-in display
+    let display_info = get_display_info(display_id);
+    let is_builtin = display_info
+        .as_ref()
+        .map(|info| info.display_type.contains("MacBook") || info.display_type.contains("built"))
+        .unwrap_or(false);
+
+    let current = get_current_mode(display_id)
+        .ok_or_else(|| format!("Could not get current mode for display {}", display_id))?;
+
+    let modes = get_all_modes(display_id);
+
+    // Find modes with same width, hz, color_depth, and scaling
+    let similar_modes: Vec<_> = modes
+        .iter()
+        .filter(|mode| {
+            mode.width == current.width
+                && (mode.refresh_rate - current.refresh_rate).abs() < 0.1
+                && mode.depth == current.depth
+                && mode.is_scaled == current.is_scaled
+        })
+        .collect();
+
+    if similar_modes.is_empty() {
+        return Err(format!("No similar modes found for display {}", display_id));
+    }
+
+    // Sort by height
+    let mut sorted_modes = similar_modes.clone();
+    sorted_modes.sort_by_key(|mode| mode.height);
+
+    // Check if there are actually different heights (notch-capable)
+    let min_height = sorted_modes.first().map(|m| m.height).unwrap_or(0);
+    let max_height = sorted_modes.last().map(|m| m.height).unwrap_or(0);
+
+    if min_height == max_height {
+        if is_builtin {
+            return Err(format!(
+                "Display {} does not appear to have a notch (no alternate height modes found)",
+                display_id
+            ));
+        } else {
+            return Err(format!(
+                "Display {} is not a MacBook built-in display with a notch",
+                display_id
+            ));
+        }
+    }
+
+    // Warn if this doesn't look like a notch scenario
+    let height_diff = max_height - min_height;
+    if !is_builtin && height_diff > 100 {
+        eprintln!(
+            "Warning: Display {} is not a built-in display. The height difference ({}px) may not be notch-related.",
+            display_id, height_diff
         );
     }
 
-    println!("\n* = current mode");
-    println!(
-        "\nDisplayServices available: {}",
-        is_display_services_available()
-    );
+    // Determine target mode based on action
+    let target_mode = match action {
+        NotchAction::Hide => {
+            // Find mode with smaller height
+            sorted_modes
+                .iter()
+                .rev()
+                .find(|mode| mode.height < current.height)
+                .or_else(|| sorted_modes.first())
+        }
+        NotchAction::Show => {
+            // Find mode with larger height
+            sorted_modes
+                .iter()
+                .find(|mode| mode.height > current.height)
+                .or_else(|| sorted_modes.last())
+        }
+        NotchAction::Toggle => {
+            // Check if we're at the smallest height (notch hidden)
+            let min_height = sorted_modes.first().map(|m| m.height).unwrap_or(0);
+            if current.height == min_height {
+                // Currently hidden, show it
+                sorted_modes
+                    .iter()
+                    .find(|mode| mode.height > current.height)
+                    .or_else(|| sorted_modes.last())
+            } else {
+                // Currently showing or in between, hide it
+                sorted_modes
+                    .iter()
+                    .rev()
+                    .find(|mode| mode.height < current.height)
+                    .or_else(|| sorted_modes.first())
+            }
+        }
+    };
 
-    if let Some(current) = current {
+    if let Some(mode) = target_mode {
+        if mode.mode_number == current.mode_number {
+            println!(
+                "Display {} is already in the target mode ({}x{} @ {:.0}Hz)",
+                display_id, mode.width, mode.height, mode.refresh_rate
+            );
+            return Ok(());
+        }
+
+        set_display_mode(display_id, mode.mode_number)?;
+
+        let action_desc = match action {
+            NotchAction::Hide => "hidden",
+            NotchAction::Show => "shown",
+            NotchAction::Toggle => {
+                if mode.height < current.height {
+                    "hidden"
+                } else {
+                    "shown"
+                }
+            }
+        };
+
         println!(
-            "Current mode is: {} ({}x{} @ {:.0}Hz)",
-            current.mode_number, current.width, current.height, current.refresh_rate
+            "Notch {} on display {} (switched to mode {}: {}x{} @ {:.0}Hz)",
+            action_desc, display_id, mode.mode_number, mode.width, mode.height, mode.refresh_rate
         );
+        Ok(())
+    } else {
+        Err(format!("No suitable mode found to {:?} the notch", action))
     }
 }
 
@@ -281,11 +486,21 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::List) => {
-            print!("{}", list_displays());
+        Some(Commands::List { json }) => {
+            if json {
+                println!("{}", list_displays_json());
+            } else {
+                print!("{}", list_displays());
+            }
         }
-        Some(Commands::Modes { display_id }) => {
-            show_modes(display_id);
+        Some(Commands::Modes { display_id, json }) => {
+            show_modes(display_id, json);
+        }
+        Some(Commands::Notch { action, display_id }) => {
+            if let Err(e) = handle_notch_command(action, display_id) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
         None => {
             if cli.configs.is_empty() {

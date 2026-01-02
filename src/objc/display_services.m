@@ -14,12 +14,16 @@ typedef int (*CGSGetDisplayModeDescription_t)(uint32_t displayID, int idx, int *
 typedef int (*CGSGetCurrentDisplayMode_t)(uint32_t displayID, int *outModeNum);
 typedef int (*CGSConfigureDisplayMode_t)(void *config, uint32_t displayID, int modeNum);
 
+// CGDisplayCreateUUIDFromDisplayID function pointer type
+typedef CFUUIDRef (*CGDisplayCreateUUIDFromDisplayID_t)(CGDirectDisplayID display);
+
 // Global function pointers
 static void *ds_handle = NULL;
 static CGSGetNumberOfDisplayModes_t cgs_get_num_modes = NULL;
 static CGSGetDisplayModeDescription_t cgs_get_mode_desc = NULL;
 static CGSGetCurrentDisplayMode_t cgs_get_current = NULL;
 static CGSConfigureDisplayMode_t cgs_configure = NULL;
+static CGDisplayCreateUUIDFromDisplayID_t cg_display_create_uuid = NULL;
 static bool ds_initialized = false;
 
 static DisplayMode mode_from_cgs(int *buffer) {
@@ -84,6 +88,11 @@ static void ds_init(void) {
         dlclose(ds_handle);
         ds_handle = NULL;
     }
+
+    // Try to load CGDisplayCreateUUIDFromDisplayID from CoreGraphics
+    // This function exists but may not be in public headers
+    // Use RTLD_DEFAULT since CoreGraphics is already linked
+    cg_display_create_uuid = dlsym(RTLD_DEFAULT, "CGDisplayCreateUUIDFromDisplayID");
 }
 
 bool ds_is_available(void) {
@@ -270,45 +279,39 @@ void ds_free_mode(DisplayMode *mode) {
 }
 
 char *ds_get_display_uuid(uint32_t display_id) {
-    // CGDisplayCreateUUIDFromDisplayID is not available in public API
-    // Use IOKit to get the UUID instead
-    io_service_t service = CGDisplayIOServicePort(display_id);
-    if (!service) {
-        // Fallback: create a pseudo-UUID from display ID
-        char *buffer = malloc(64);
-        if (buffer) {
-            snprintf(buffer, 64, "%08X-0000-0000-0000-000000000000", display_id);
+    ds_init();
+
+    // Try to use CGDisplayCreateUUIDFromDisplayID if available
+    if (cg_display_create_uuid) {
+        CFUUIDRef uuid_ref = cg_display_create_uuid(display_id);
+        if (uuid_ref) {
+            // Convert CFUUIDRef to string
+            CFStringRef uuid_string = CFUUIDCreateString(kCFAllocatorDefault, uuid_ref);
+            CFRelease(uuid_ref);
+
+            if (uuid_string) {
+                // Convert CFString to C string
+                CFIndex length = CFStringGetLength(uuid_string);
+                CFIndex maxSize = CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
+                char *buffer = malloc(maxSize);
+
+                if (buffer) {
+                    if (CFStringGetCString(uuid_string, buffer, maxSize, kCFStringEncodingUTF8)) {
+                        CFRelease(uuid_string);
+                        return buffer;
+                    }
+                    free(buffer);
+                }
+                CFRelease(uuid_string);
+            }
         }
-        return buffer;
     }
 
-    CFDictionaryRef info = IODisplayCreateInfoDictionary(service, kIODisplayOnlyPreferredName);
-    if (!info) {
-        char *buffer = malloc(64);
-        if (buffer) {
-            snprintf(buffer, 64, "%08X-0000-0000-0000-000000000000", display_id);
-        }
-        return buffer;
-    }
-
-    // Try to get display properties for UUID generation
-    CFNumberRef vendorID = CFDictionaryGetValue(info, CFSTR(kDisplayVendorID));
-    CFNumberRef productID = CFDictionaryGetValue(info, CFSTR(kDisplayProductID));
-    CFNumberRef serialNum = CFDictionaryGetValue(info, CFSTR(kDisplaySerialNumber));
-
-    uint32_t vendor = 0, product = 0, serial = 0;
-    if (vendorID) CFNumberGetValue(vendorID, kCFNumberSInt32Type, &vendor);
-    if (productID) CFNumberGetValue(productID, kCFNumberSInt32Type, &product);
-    if (serialNum) CFNumberGetValue(serialNum, kCFNumberSInt32Type, &serial);
-
+    // Fallback: create a pseudo-UUID from display ID
     char *buffer = malloc(64);
     if (buffer) {
-        snprintf(buffer, 64, "%08X-%04X-%04X-%04X-%08X%04X",
-                 vendor, product, (serial >> 16) & 0xFFFF, serial & 0xFFFF,
-                 display_id, (vendor ^ product) & 0xFFFF);
+        snprintf(buffer, 64, "%08X-0000-0000-0000-000000000000", display_id);
     }
-
-    CFRelease(info);
     return buffer;
 }
 
