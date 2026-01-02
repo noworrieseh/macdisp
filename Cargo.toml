@@ -1,7 +1,13 @@
 [package]
 name = "macdisp"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
+license = "MIT"
+homepage = "https://github.com/noworrieseh/macdisp"
+repository = "https://github.com/noworrieseh/macdisp"
+description = """
+macdisp, display resolution tool
+""""
 
 [dependencies]
 core-graphics = "0.23"
