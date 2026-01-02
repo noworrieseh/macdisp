@@ -4,7 +4,7 @@ A Rust implementation of [displayplacer](https://github.com/jakehilborn/displayp
 
 ## Important Note for macOS Sequoia Users
 
-On macOS Sequoia (15.x), Apple has moved the DisplayServices framework into the dyld shared cache and changed/removed many of its APIs. **This is completely fine** - the tool works perfectly using CoreGraphics, which is the official Apple API and provides all necessary functionality:
+On macOS Sequoia (15.x), Apple has moved the DisplayServices framework into the dyld shared cache and changed/removed many of its APIs. The tool works perfectly using CoreGraphics, which is the official Apple API and provides all necessary functionality:
 
 - ✅ List all displays and their configurations
 - ✅ Access all "safe" display modes (60+ modes typically available)
@@ -20,19 +20,35 @@ The only difference is you won't see potentially unstable/unsupported modes that
 
 ## Installation
 
-### Pre-built Binary (Recommended)
+### Homebrew (Recommended)
 
-Download the latest release from the [releases page](https://github.com/YOUR_USERNAME/macdisp/releases):
+```bash
+# Add the tap
+brew tap noworrieseh/brews
+
+# Install macdisp
+brew install macdisp
+```
+
+Or as a one-liner:
+
+```bash
+brew install noworrieseh/brews/macdisp
+```
+
+### Pre-built Binary
+
+Download the latest release from the [releases page](https://github.com/noworrieseh/macdisp/releases):
 
 ```bash
 # Download and install (ARM64 / Apple Silicon)
-curl -L https://github.com/YOUR_USERNAME/macdisp/releases/latest/download/macdisp-macos-vX.X.X.tar.gz -o macdisp.tar.gz
+curl -L https://github.com/noworrieseh/macdisp/releases/latest/download/macdisp-macos-vX.X.X.tar.gz -o macdisp.tar.gz
 tar -xzf macdisp.tar.gz
 sudo mv macdisp /usr/local/bin/
 sudo chmod +x /usr/local/bin/macdisp
 
 # Or use the universal binary (works on both Intel and Apple Silicon)
-curl -L https://github.com/YOUR_USERNAME/macdisp/releases/latest/download/macdisp-universal-vX.X.X.tar.gz -o macdisp.tar.gz
+curl -L https://github.com/noworrieseh/macdisp/releases/latest/download/macdisp-universal-vX.X.X.tar.gz -o macdisp.tar.gz
 tar -xzf macdisp.tar.gz
 sudo mv macdisp-universal /usr/local/bin/macdisp
 sudo chmod +x /usr/local/bin/macdisp
@@ -50,13 +66,13 @@ sudo chmod +x /usr/local/bin/macdisp
 
 ```bash
 # Clone the repository
-git clone <your-repo>
+git clone https://github.com/noworrieseh/macdisp.git
 cd macdisp
 
 # Build release version
 cargo build --release
 
-# The binary will be at target/release/cd macdisp
+# The binary will be at target/release/macdisp
 
 ```
 
@@ -321,7 +337,6 @@ This implementation provides full CLI compatibility with the original displaypla
 
 1. **Display Rotation**: Reading rotation works, but setting rotation via public APIs is not available. Rotation requires system reboot to take effect.
 2. **Enable/Disable**: The main display cannot be disabled via public APIs.
-3. **UUID Generation**: Uses IOKit to generate UUIDs since the private API is not publicly available.
 
 ## Development
 
