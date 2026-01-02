@@ -2,22 +2,6 @@
 
 A Rust implementation of [displayplacer](https://github.com/jakehilborn/displayplacer) with full compatibility. This tool allows you to configure macOS display settings from the command line.
 
-## Important Note for macOS Sequoia Users
-
-On macOS Sequoia (15.x), Apple has moved the DisplayServices framework into the dyld shared cache and changed/removed many of its APIs. The tool works perfectly using CoreGraphics, which is the official Apple API and provides all necessary functionality:
-
-- ✅ List all displays and their configurations
-- ✅ Access all "safe" display modes (60+ modes typically available)
-- ✅ Change resolutions and refresh rates
-- ✅ Full compatibility with original displayplacer
-
-The only difference is you won't see potentially unstable/unsupported modes that DisplayServices exposed on older macOS versions. For 99.9% of use cases, CoreGraphics provides everything you need.
-
-- **DisplayServices Support**: Accesses private DisplayServices framework for complete display mode information
-- **Automatic Fallback**: Falls back to CoreGraphics APIs when DisplayServices is unavailable
-- **Full Mode Access**: Can access and set all display modes, including hidden/unsafe ones (via DisplayServices)
-- **Compatible CLI**: Drop-in replacement for the original displayplacer syntax
-
 ## Installation
 
 ### Homebrew (Recommended)
@@ -371,6 +355,22 @@ Contributions welcome! Areas for improvement:
 - Better error handling and user feedback
 - Support for additional display features (HDR, color profiles)
 - Automated testing
+
+## Important Note for macOS Sequoia Users
+
+On macOS Sequoia (15.x), Apple has moved the DisplayServices framework into the dyld shared cache and changed/removed many of its APIs. The tool works perfectly using CoreGraphics, which is the official Apple API and provides all necessary functionality:
+
+- ✅ List all displays and their configurations
+- ✅ Access all "safe" display modes (60+ modes typically available)
+- ✅ Change resolutions and refresh rates
+- ✅ Full compatibility with original displayplacer
+
+The only difference is you won't see potentially unstable/unsupported modes that DisplayServices exposed on older macOS versions. For 99.9% of use cases, CoreGraphics provides everything you need.
+
+- **DisplayServices Support**: Accesses private DisplayServices framework for complete display mode information
+- **Automatic Fallback**: Falls back to CoreGraphics APIs when DisplayServices is unavailable
+- **Full Mode Access**: Can access and set all display modes, including hidden/unsafe ones (via DisplayServices)
+- **Compatible CLI**: Drop-in replacement for the original displayplacer syntax
 
 ## License
 
