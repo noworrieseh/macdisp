@@ -4,7 +4,7 @@ A Rust implementation of [displayplacer](https://github.com/jakehilborn/displayp
 
 ## Installation
 
-### Homebrew (Recommended)
+### Homebrew
 
 ```bash
 # Add the tap
@@ -18,6 +18,18 @@ Or as a one-liner:
 
 ```bash
 brew install noworrieseh/brews/macdisp
+```
+
+### MacPorts
+
+```bash
+sudo port install macdisp
+```
+
+### crates.io
+
+```bash
+cargo install macdisp
 ```
 
 ### Pre-built Binary
